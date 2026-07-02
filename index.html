@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NATIONAL SCHOLASTIC CHESS CHAMPIONSHIP 2026</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial;
+      text-align: center;
+      background: #eef3fb;
+      padding: 15px;
+      margin: 0;
+    }
+    h2 { color: #003366; font-size: 1.3em; margin-bottom: 3px; margin-top: 10px; }
+    h4 { color: #555; margin-top: 0; margin-bottom: 15px; font-size: 0.95em; }
+    
+    button {
+      padding: 12px 24px;
+      font-size: 1em;
+      border-radius: 8px;
+      border: none;
+      background: #0057e7;
+      color: white;
+      cursor: pointer;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    
+    /* 📐 Camera Viewport Layout */
+    .scanner-container {
+      margin: 5px auto;
+      max-width: 320px;
+      background: #000;
+      border-radius: 12px;
+      display: none;
+      clip-path: inset(20% 0% 20% 0% round 12px); 
+      margin-top: -35px;    
+      margin-bottom: -15px; 
+    }
+    #reader { width: 100%; }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #0057e7;
+      border-radius: 50%;
+      width: 35px;
+      height: 35px;
+      animation: spin 1s linear infinite;
+      margin: 15px auto;
+      display: none;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 📋 Active Dynamic Tracking Board Section  */
+    .board-title {
+      text-align: left;
+      max-width: 310px;
+      margin: 20px auto 8px auto;
+      font-size: 1em;
+      color: #003366;
+      font-weight: bold;
+      border-bottom: 2px solid #cbdcf7;
+      padding-bottom: 4px;
+    }
+    
+    #activeBoard {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    /* 🪪 Streamlined Interactive Player Card */
+    .player-card {
+      background: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.08);
+      width: 310px;
+      text-align: left;
+      box-sizing: border-box;
+      border-left: 5px solid red; /* Visual alert color meaning they are occupied inside the toilet */
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      position: relative;
+    }
+    .player-card:active {
+      transform: scale(0.98);
+      background: #f0f4f8;
+    }
+    .player-card h3 {
+      margin: 0 0 4px 0;
+      color: #003366;
+      font-size: 1.1em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding-right: 70px;
+    }
+    .player-card p {
+      line-height: 1.3;
+      font-size: 0.85em;
+      margin: 3px 0;
+      color: #555;
+    }
+    
+    /* Live Warning Timer Tag Styling */
+    .timer-tag {
+      position: absolute;
+      right: 16px;
+      top: 12px;
+      font-size: 0.9em;
+      font-weight: bold;
+      color: red;
+      background: #fff0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    
+    /* 🚨 Light red warning background flash if player stays out >= 5 minutes */
+    .player-card.overtime {
+      background: #ffcccc;
+      border-left: 5px solid #cc0000;
+    }
+    .player-card.overtime .timer-tag {
+      background: #cc0000;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>NATIONAL SCHOLASTIC CHESS CHAMPIONSHIP 2026</h2>
+  <h4>Toilet Occupancy Board</h4>
+  
+  <button id="scanBtn">Start QR Code Scanner</button>
+
+  <div class="scanner-container" id="scannerContainer">
+    <div id="reader"></div>
+  </div>
+
+  <div class="spinner" id="spinner"></div>
+
+  <div class="board-title">Players Currently In Toilet:</div>
+  <div id="activeBoard"></div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwxC5a65iHafoNRnqxijnveXN_nJXtaH5jiVKgxv3BvIk0kCXaltXozHILBWDWVaDuK/exec";
+    
+    const scanBtn = document.getElementById('scanBtn');
+    const spinner = document.getElementById('spinner');
+    const activeBoard = document.getElementById('activeBoard');
+    const scannerContainer = document.getElementById('scannerContainer');
+
+    let html5QrcodeScanner = null;
+    let lastScanId = "";
+    let lastScanTime = 0;
+    
+    // Tracks current occupants in the bathroom
+    let activePlayers = {}; 
+
+    function onScanSuccess(decodedText, decodedResult) {
+      const userId = decodedText.trim();
+      const now = Date.now();
+
+      if (userId === lastScanId && now - lastScanTime < 4000) return;
+
+      lastScanId = userId;
+      lastScanTime = now;
+      spinner.style.display = "block";
+
+      processAttendance(userId);
+    }
+
+    function startScan() {
+      scannerContainer.style.display = "block";
+      scanBtn.innerText = "Scanner Active";
+      scanBtn.disabled = true;
+
+      html5QrcodeScanner = new Html5Qrcode("reader");
+      // Keeping a square viewport config suited well for QR codes
+      const config = { fps: 20, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 };
+
+      html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess, () => {})
+      .catch(err => {
+        alert("Camera Access Error: " + err);
+        stopScan();
+      });
+    }
+
+    async function processAttendance(userId) {
+      try {
+        const res = await fetch(`${API_URL}?userId=${encodeURIComponent(userId)}`, {
+          method: "GET",
+          redirect: "follow"
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        
+        if (data.error) {
+          alert(`System Error: ${data.error}`);
+          return;
+        }
+
+        handleBoardUpdate(data, userId);
+      } catch (err) { 
+        alert("Data Transfer Error: Could not connect to spreadsheet.");
+      } finally {
+        spinner.style.display = "none";
+      }
+    }
+
+    function handleBoardUpdate(data, userId) {
+      if (data.status === "In") {
+        // Enters toilet -> Push card onto your visual view dashboard
+        activePlayers[userId] = {
+          id: data.id,
+          name: data.name,
+          category: data.category || data.nationality, // Looks for data.category from your web app backend response
+          outTime: new Date() // Tracks counting runtime locally 
+        };
+      } else if (data.status === "Out") {
+        // Exits toilet and goes back -> Wipe card instantly from display tracking stack
+        delete activePlayers[userId];
+      }
+      renderBoard();
+    }
+
+    // Direct manual override command if a player walks out of the toilet without scanning badge
+    function manualClear(userId, playerName) {
+      const confirmOverride = confirm(`Misscan Override:\nChange ${playerName} status to "OUT" (Returned to hall) manually?`);
+      if (confirmOverride) {
+        spinner.style.display = "block";
+        
+        // Remove visually instantly from your phone view
+        delete activePlayers[userId];
+        renderBoard();
+        
+        // Quietly execute request to write the "Out" record into your log sheet backend
+        processAttendance(userId);
+      }
+    }
+
+    function renderBoard() {
+      activeBoard.innerHTML = "";
+      
+      const entries = Object.entries(activePlayers);
+      if (entries.length === 0) {
+        activeBoard.innerHTML = "<p style='color:#777; font-size:0.9em; margin-top:10px;'>Toilet is currently empty.</p>";
+        return;
+      }
+
+      // Reverse map entries so that the newest scan always pushes up onto the top layer row
+      entries.reverse().forEach(([userId, player]) => {
+        const card = document.createElement("div");
+        card.className = "player-card";
+        card.id = `card-${userId}`;
+        
+        // Bind manual tap click handler directly onto container layout
+        card.onclick = () => manualClear(userId, player.name);
+
+        // UI Label updated to read "Category"
+        card.innerHTML = `
+          <div class="timer-tag" id="timer-${userId}">0m 0s</div>
+          <h3>${player.name}</h3>
+          <p><b>User ID:</b> ${player.id}</p>
+          <p><b>Category:</b> ${player.category || ''}</p>
+        `;
+
+        activeBoard.appendChild(card);
+      });
+
+      updateTimers();
+    }
+
+    function updateTimers() {
+      const now = new Date();
+      let hasActiveCards = false;
+
+      Object.entries(activePlayers).forEach(([userId, player]) => {
+        hasActiveCards = true;
+        const timerElement = document.getElementById(`timer-${userId}`);
+        const cardElement = document.getElementById(`card-${userId}`);
+        
+        if (timerElement && cardElement) {
+          const elapsedMs = now - player.outTime;
+          const totalSecs = Math.floor(elapsedMs / 1000);
+          const mins = Math.floor(totalSecs / 60);
+          const secs = totalSecs % 60;
+
+          timerElement.innerText = `${mins}m ${secs}s`;
+
+          // Trigger light-red alert styles when gone for 5 minutes or longer
+          if (mins >= 5) {
+            cardElement.classList.add("overtime");
+          } else {
+            cardElement.classList.remove("overtime");
+          }
+        }
+      });
+
+      if (hasActiveCards) {
+        setTimeout(updateTimers, 1000);
+      }
+    }
+
+    scanBtn.addEventListener("click", startScan);
+    
+    // Initial display painting initialization
+    renderBoard();
+  </script>
+</body>
+</html>
