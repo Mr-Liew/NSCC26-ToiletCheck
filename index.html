@@ -179,20 +179,45 @@
     }
 
     function startScan() {
-      scannerContainer.style.display = "block";
-      scanBtn.innerText = "Scanner Active";
-      scanBtn.disabled = true;
+  scannerContainer.style.display = "block";
+  scanBtn.innerText = "Scanner Active";
+  scanBtn.disabled = true;
 
-      html5QrcodeScanner = new Html5Qrcode("reader");
-      // Keeping a square viewport config suited well for QR codes
-      const config = { fps: 20, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 };
+  // Make sure the element exists and pass the exact ID string
+  html5QrcodeScanner = new Html5Qrcode("reader");
+  
+  const config = { 
+    fps: 20, 
+    qrbox: { width: 220, height: 220 }, 
+    aspectRatio: 1.0 
+  };
 
-      html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess, () => {})
-      .catch(err => {
-        alert("Camera Access Error: " + err);
-        stopScan();
-      });
+  // Request camera permissions explicitly by starting it
+  html5QrcodeScanner.start(
+    { facingMode: "environment" }, 
+    config, 
+    onScanSuccess, 
+    (errorMessage) => {
+      // Quietly log scanning tracking errors without alert spamming
+      console.log(errorMessage);
     }
+  )
+  .catch(err => {
+    alert("Camera Access Error: " + err);
+    stopScan();
+  });
+}
+
+// Simple reset helper in case it fails
+function stopScan() {
+  if (html5QrcodeScanner) {
+    html5QrcodeScanner.stop().then(() => {
+      scannerContainer.style.display = "none";
+      scanBtn.innerText = "Start QR Code Scanner";
+      scanBtn.disabled = false;
+    }).catch(err => console.error(err));
+  }
+}
 
     async function processAttendance(userId) {
       try {
